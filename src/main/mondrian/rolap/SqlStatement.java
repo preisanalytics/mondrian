@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.sql.DataSource;
+import org.apache.log4j.Logger;
 
 /**
  * SqlStatement contains a SQL statement and associated resources throughout
@@ -61,6 +62,7 @@ public class SqlStatement {
 
     // used for SQL logging, allows for a SQL Statement UID
     private static final AtomicLong ID_GENERATOR = new AtomicLong();
+    public static final Logger SQL_LOGGER = Logger.getLogger("mondrian.sql");
 
     private static final Semaphore querySemaphore = new Semaphore(
         MondrianProperties.instance().QueryLimit.get(), true);
@@ -83,6 +85,7 @@ public class SqlStatement {
     private State state = State.FRESH;
     private final long id;
     private Functor1<Void, Statement> callback;
+    private long onlyFetch;
 
     /**
      * Creates a SqlStatement.
@@ -152,7 +155,7 @@ public class SqlStatement {
                 }
                 sqllog.append(sql);
                 sqllog.append(']');
-                RolapUtil.SQL_LOGGER.debug(sqllog.toString());
+//                RolapUtil.SQL_LOGGER.debug(sqllog.toString());
             }
 
             // Execute hook.
@@ -197,6 +200,12 @@ public class SqlStatement {
                     getCellRequestCount()));
 
             this.resultSet = statement.executeQuery(sql);
+
+
+            long onlyExecuteTimeNanos = System.nanoTime();
+            final long onlyExecuteNanos = onlyExecuteTimeNanos - startTimeNanos;
+            this.onlyFetch = onlyExecuteNanos / 1000000;
+
 
             // skip to first row specified in request
             this.state = State.ACTIVE;
@@ -251,12 +260,12 @@ public class SqlStatement {
             // Now handle this exception.
             throw handle(e);
         } finally {
-            RolapUtil.SQL_LOGGER.debug(id + ": " + status);
+           // RolapUtil.SQL_LOGGER.debug(id + ": " + status);
 
-            if (RolapUtil.LOGGER.isDebugEnabled()) {
-                RolapUtil.LOGGER.debug(
-                    locus.component + ": executing sql [" + sql + "]" + status);
-            }
+//            if (RolapUtil.LOGGER.isDebugEnabled()) {
+//                RolapUtil.LOGGER.debug(
+//                    locus.component + ": executing sql [" + sql + "]" + status);
+//            }
         }
     }
 
@@ -313,11 +322,11 @@ public class SqlStatement {
             + ", close=" + Counters.SQL_STATEMENT_CLOSE_COUNT.get()
             + ", open=" + Counters.SQL_STATEMENT_EXECUTING_IDS;
 
-        if (RolapUtil.LOGGER.isDebugEnabled()) {
-            RolapUtil.LOGGER.debug(
+//        if (RolapUtil.LOGGER.isDebugEnabled()) {
+        SQL_LOGGER.debug(
                 locus.component + ": done executing sql [" + sql + "]"
-                + status);
-        }
+                        + status + "ONLY FETCH :: " + this.onlyFetch);
+//        }
 
         if (!remove) {
             throw new AssertionError(
